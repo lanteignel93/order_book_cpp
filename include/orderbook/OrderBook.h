@@ -1,14 +1,15 @@
 #pragma once
 #include "Order.h"
 #include "Trade.h"
-#include <deque>
 #include <functional>
+#include <list>
 #include <map>
 #include <unordered_map>
 
 class OrderBook {
   public:
     TradeVector ProcessOrder(const Order &_incoming);
+    bool CancelOrder(uint64_t order_id);
 
   private:
     // This is a good place to define your order book data structures.
@@ -17,7 +18,7 @@ class OrderBook {
     // orders that are matched so accessing the "First-In"
     // at the lowest price (for sells) and highest price (for buys) is
     // efficient."
-    using OrderQueue = std::deque<OrderPtr>;
+    using OrderQueue = std::list<OrderPtr>;
 
     std::map<double, OrderQueue> sell_book;
     std::map<double, OrderQueue, std::greater<double>> buy_book;
@@ -27,11 +28,10 @@ class OrderBook {
     void AddToBuyBook(OrderPtr o);
     void AddToSellBook(OrderPtr o);
 
-    bool CancelOrder(uint64_t order_id);
-
     struct OrderLocator {
         SIDE side;
         double price;
+        OrderQueue::iterator it;
     };
 
     std::unordered_map<uint64_t, OrderLocator> locators;

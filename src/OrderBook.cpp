@@ -17,14 +17,14 @@ TradeVector OrderBook::MatchBuy(OrderPtr incoming) {
     TradeVector trades;
 
     while (!sell_book.empty() && incoming->QtyRemaining() > 0) {
-        auto best_sell_container = sell_book.begin();
-        double best_sell_price = best_sell_container->first;
+        auto best_sell_it = sell_book.begin();
+        double best_sell_price = best_sell_it->first;
 
         if (best_sell_price > incoming->Price()) {
             break;
         }
 
-        auto &sell_queue = best_sell_container->second;
+        auto &sell_queue = best_sell_it->second;
         OrderPtr resting = sell_queue.front();
 
         uint32_t match_qty =
@@ -41,7 +41,7 @@ TradeVector OrderBook::MatchBuy(OrderPtr incoming) {
             locators.erase(resting->OrderId());
             sell_queue.pop_front();
             if (sell_queue.empty()) {
-                sell_book.erase(best_sell_container);
+                sell_book.erase(best_sell_it);
             }
         }
     }
@@ -57,14 +57,14 @@ TradeVector OrderBook::MatchSell(OrderPtr incoming) {
     TradeVector trades;
 
     while (!buy_book.empty() && incoming->QtyRemaining() > 0) {
-        auto best_buy_container = buy_book.begin();
-        double best_buy_price = best_buy_container->first;
+        auto best_buy_it = buy_book.begin();
+        double best_buy_price = best_buy_it->first;
 
         if (best_buy_price < incoming->Price()) {
             break;
         }
 
-        auto &buy_queue = best_buy_container->second;
+        auto &buy_queue = best_buy_it->second;
         OrderPtr resting = buy_queue.front();
 
         uint32_t match_qty =
@@ -81,7 +81,7 @@ TradeVector OrderBook::MatchSell(OrderPtr incoming) {
             locators.erase(resting->OrderId());
             buy_queue.pop_front();
             if (buy_queue.empty()) {
-                buy_book.erase(best_buy_container);
+                buy_book.erase(best_buy_it);
             }
         }
     }
@@ -94,59 +94,59 @@ TradeVector OrderBook::MatchSell(OrderPtr incoming) {
 }
 
 void OrderBook::AddToSellBook(OrderPtr o) {
-    sell_book[o->Price()].push_back(o);
-    locators[o->OrderId()] = OrderLocator{SIDE::SELL, o->Price()};
+    auto &q = sell_book[o->Price()];
+    q.push_back(o);
+
+    auto it = std::prev(q.end());
+    locators[o->OrderId()] = OrderLocator{SIDE::SELL, o->Price(), it};
 }
 
 void OrderBook::AddToBuyBook(OrderPtr o) {
-    buy_book[o->Price()].push_back(o);
-    locators[o->OrderId()] = OrderLocator{SIDE::BUY, o->Price()};
+    auto &q = buy_book[o->Price()];
+    q.push_back(o);
+
+    auto it = std::prev(q.end());
+    locators[o->OrderId()] = OrderLocator{SIDE::BUY, o->Price(), it};
 }
 
 bool OrderBook::CancelOrder(uint64_t order_id) {
-    auto it = locators.find(order_id);
-    if (it == locators.end()) {
+    auto loc_it = locators.find(order_id);
+    if (loc_it == locators.end()) {
         return false;
     }
 
-    const OrderLocator loc = it->second;
+    const OrderLocator loc = loc_it->second;
 
     if (loc.side == SIDE::BUY) {
         auto lvl = buy_book.find(loc.price);
         if (lvl == buy_book.end()) {
-            locators.erase(it);
+            locators.erase(loc_it);
             return false;
         }
 
         auto &q = lvl->second;
-        for (auto oq_it = q.begin(); oq_it != q.end(); ++oq_it) {
-            if ((*oq_it)->OrderId() == order_id) {
-                q.erase(oq_it);
-                locators.erase(it);
-                if (q.empty())
-                    buy_book.erase(lvl);
-                return true;
-            }
-        }
+        q.erase(loc.it);
+        locators.erase(loc_it);
+
+        if (q.empty())
+            buy_book.erase(lvl);
+        return true;
+
     } else {
         auto lvl = sell_book.find(loc.price);
         if (lvl == sell_book.end()) {
-            locators.erase(it);
+            locators.erase(loc_it);
             return false;
         }
 
         auto &q = lvl->second;
-        for (auto oq_it = q.begin(); oq_it != q.end(); ++oq_it) {
-            if ((*oq_it)->OrderId() == order_id) {
-                q.erase(oq_it);
-                locators.erase(it);
-                if (q.empty())
-                    sell_book.erase(lvl);
-                return true;
-            }
-        }
+        q.erase(loc.it);
+        locators.erase(loc_it);
+
+        if (q.empty())
+            sell_book.erase(lvl);
+        return true;
     }
 
-    locators.erase(it);
     return false;
 }

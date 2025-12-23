@@ -31,7 +31,6 @@ int main() {
     TradeVector trades;
 
     uint64_t next_order_id = 1;
-
     while (std::getline(file, line)) {
         if (line.empty())
             continue;
@@ -95,6 +94,11 @@ int main() {
         // Pass to matching engine
         const auto new_trades = book.ProcessOrder(order);
         trades.insert(trades.end(), new_trades.begin(), new_trades.end());
+
+        // Testing the CancelOrder
+        if (next_order_id == 10) {
+            book.CancelOrder(3);
+        }
     }
 
     // Either output trades and book here or set breakpoints to inspect
