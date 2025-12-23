@@ -70,3 +70,6 @@ xcuserdata/
 .vscode/
 *~
 *.swp
+
+.cache/
+docs/INSTRUCTIONS.md
