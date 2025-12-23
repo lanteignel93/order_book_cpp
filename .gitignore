@@ -1,0 +1,72 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug information files
+*.ilk
+*.pdb
+*.d
+
+# CMake
+/build/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+CMakeConfig.cmake
+install_manifest.txt
+cmake_install.cmake
+
+# Visual Studio
+.vs/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Xcode
+.build/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcworkspace
+xcuserdata/
+
+# Code::Blocks
+*.cbp
+*.layout
+
+# Clion
+.idea/
+
+# Editors
+.vscode/
+*~
+*.swp

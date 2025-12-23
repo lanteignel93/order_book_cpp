@@ -27,6 +27,7 @@ class Order {
     }
 
   private:
+    uint64_t order_id;
     int64_t timestamp;
     std::string trader;
     SIDE side;

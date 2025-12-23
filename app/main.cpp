@@ -4,8 +4,8 @@
 #include <sstream>
 #include <string>
 
-#include "Order.h"
-#include "OrderBook.h"
+#include "orderbook/Order.h"
+#include "orderbook/OrderBook.h"
 
 SIDE ParseSide(char c) {
     if (c == 'B')
@@ -16,7 +16,7 @@ SIDE ParseSide(char c) {
 }
 
 int main() {
-    const std::string filename = "order_data.csv";
+    const std::string filename = "data/order_data.csv";
     std::ifstream file(filename);
 
     if (!file.is_open()) {
