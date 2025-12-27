@@ -14,7 +14,7 @@ TradeVector OrderBook::ProcessOrder(const Order &_incoming) {
 }
 
 TradeVector OrderBook::MatchBuy(OrderPtr incoming) {
-    TradeVector trades;
+    TradeVector trade_vector;
 
     while (!sell_book.empty() && incoming->QtyRemaining() > 0) {
         auto best_sell_it = sell_book.begin();
@@ -30,7 +30,7 @@ TradeVector OrderBook::MatchBuy(OrderPtr incoming) {
         uint32_t match_qty =
             std::min(incoming->QtyRemaining(), resting->QtyRemaining());
 
-        trades.push_back(std::make_shared<Trade>(
+        trade_vector.push_back(std::make_shared<Trade>(
             incoming->Timestamp(), incoming->Trader(), resting->Trader(),
             resting->Price(), match_qty));
 
@@ -50,11 +50,11 @@ TradeVector OrderBook::MatchBuy(OrderPtr incoming) {
         AddToBuyBook(incoming);
     }
 
-    return trades;
+    return trade_vector;
 }
 
 TradeVector OrderBook::MatchSell(OrderPtr incoming) {
-    TradeVector trades;
+    TradeVector trade_vector;
 
     while (!buy_book.empty() && incoming->QtyRemaining() > 0) {
         auto best_buy_it = buy_book.begin();
@@ -70,7 +70,7 @@ TradeVector OrderBook::MatchSell(OrderPtr incoming) {
         uint32_t match_qty =
             std::min(incoming->QtyRemaining(), resting->QtyRemaining());
 
-        trades.push_back(std::make_shared<Trade>(
+        trade_vector.push_back(std::make_shared<Trade>(
             incoming->Timestamp(), resting->Trader(), incoming->Trader(),
             resting->Price(), match_qty));
 
@@ -90,7 +90,7 @@ TradeVector OrderBook::MatchSell(OrderPtr incoming) {
         AddToSellBook(incoming);
     }
 
-    return trades;
+    return trade_vector;
 }
 
 void OrderBook::AddToSellBook(OrderPtr o) {

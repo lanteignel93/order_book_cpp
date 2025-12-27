@@ -22,8 +22,8 @@ static void test_cancel_prevents_match() {
 
     {
         Order buy1(1, 1, "Biden", SIDE::BUY, 100.0, 10);
-        auto trades = book.ProcessOrder(buy1);
-        CHECK(trades.empty(), "Resting BUY produces no trades");
+        auto trade_vector = book.ProcessOrder(buy1);
+        CHECK(trade_vector.empty(), "Resting BUY produces no trade_vector");
     }
 
     {
@@ -33,13 +33,13 @@ static void test_cancel_prevents_match() {
 
     {
         Order sell1(2, 2, "Donald", SIDE::SELL, 100.0, 5);
-        auto trades = book.ProcessOrder(sell1);
+        auto trade_vector = book.ProcessOrder(sell1);
 
-        CHECK(trades.empty(), "SELL after cancellation produces 0 trades");
+        CHECK(trade_vector.empty(), "SELL after cancellation produces 0 trade_vector");
 
-        if (!trades.empty()) {
-            std::cout << "Unexpected trades:\n";
-            for (const auto &t : trades) {
+        if (!trade_vector.empty()) {
+            std::cout << "Unexpected trade_vector:\n";
+            for (const auto &t : trade_vector) {
                 std::cout << " ts=" << t->Timestamp() << " buyer=" << t->Buyer()
                           << " seller=" << t->Seller()
                           << " price=" << t->Price() << " qty=" << t->Qty()
@@ -56,24 +56,24 @@ static void test_fifo_same_price_sell_side() {
 
     {
         Order sell1(1, 1, "Donald", SIDE::SELL, 100.0, 2);
-        auto trades = book.ProcessOrder(sell1);
-        CHECK(trades.empty(), "Resting SELL #1 produces no trades");
+        auto trade_vector = book.ProcessOrder(sell1);
+        CHECK(trade_vector.empty(), "Resting SELL #1 produces no trade_vector");
     }
     {
         Order sell2(2, 2, "Trump", SIDE::SELL, 100.0, 2);
-        auto trades = book.ProcessOrder(sell2);
-        CHECK(trades.empty(), "Resting SELL #2 produces no trades");
+        auto trade_vector = book.ProcessOrder(sell2);
+        CHECK(trade_vector.empty(), "Resting SELL #2 produces no trade_vector");
     }
 
     {
         Order buy1(3, 3, "Biden", SIDE::BUY, 100.0, 3);
-        auto trades = book.ProcessOrder(buy1);
+        auto trade_vector = book.ProcessOrder(buy1);
 
-        CHECK(trades.size() == 2, "Incoming BUY produces exactly 2 trades");
+        CHECK(trade_vector.size() == 2, "Incoming BUY produces exactly 2 trade_vector");
 
-        if (trades.size() >= 2) {
-            auto t0 = trades[0];
-            auto t1 = trades[1];
+        if (trade_vector.size() >= 2) {
+            auto t0 = trade_vector[0];
+            auto t1 = trade_vector[1];
 
             CHECK(t0->Buyer() == "Biden", "Trade 0 buyer is Biden");
             CHECK(t0->Seller() == "Donald", "Trade 0 seller is Donald (FIFO)");
@@ -89,13 +89,13 @@ static void test_fifo_same_price_sell_side() {
 
     {
         Order buy2(4, 4, "Obama", SIDE::BUY, 101.0, 2);
-        auto trades = book.ProcessOrder(buy2);
+        auto trade_vector = book.ProcessOrder(buy2);
 
-        CHECK(trades.size() == 1,
+        CHECK(trade_vector.size() == 1,
               "Second BUY produces exactly 1 trade (consumes remainder)");
 
-        if (!trades.empty()) {
-            auto t = trades[0];
+        if (!trade_vector.empty()) {
+            auto t = trade_vector[0];
             CHECK(t->Buyer() == "Obama", "Remainder trade buyer is Obama");
             CHECK(t->Seller() == "Trump", "Remainder trade seller is Trump");
             CHECK(t->Qty() == 1, "Remainder trade qty is 1");
@@ -112,21 +112,21 @@ static void test_price_priority() {
 
     {
         Order buy1(1, 1, "Biden", SIDE::BUY, 100, 1);
-        auto trades = book.ProcessOrder(buy1);
-        CHECK(trades.empty(), "Resting BUY #1 produces no trades");
+        auto trade_vector = book.ProcessOrder(buy1);
+        CHECK(trade_vector.empty(), "Resting BUY #1 produces no trade_vector");
     }
     {
         Order buy2(2, 2, "Obama", SIDE::BUY, 102, 1);
-        auto trades = book.ProcessOrder(buy2);
-        CHECK(trades.empty(), "Resting BUY #2 produces no trades");
+        auto trade_vector = book.ProcessOrder(buy2);
+        CHECK(trade_vector.empty(), "Resting BUY #2 produces no trade_vector");
     }
     {
         Order sell1(3, 3, "Donald", SIDE::SELL, 100, 1);
-        auto trades = book.ProcessOrder(sell1);
-        CHECK(trades.size() == 1, "Incoming SELL produces 1 trade.");
+        auto trade_vector = book.ProcessOrder(sell1);
+        CHECK(trade_vector.size() == 1, "Incoming SELL produces 1 trade.");
 
-        if (trades.size() == 1) {
-            auto t = trades[0];
+        if (trade_vector.size() == 1) {
+            auto t = trade_vector[0];
 
             CHECK(t->Buyer() == "Obama",
                   "Trade buyer is Obama (Price Priority)");

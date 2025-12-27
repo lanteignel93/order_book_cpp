@@ -28,7 +28,7 @@ int main() {
     bool is_header = true;
 
     OrderBook book;
-    TradeVector trades;
+    TradeVector trade_vector;
 
     uint64_t next_order_id = 1;
     while (std::getline(file, line)) {
@@ -92,8 +92,8 @@ int main() {
         Order order(next_order_id++, timestamp, trader, side, price, qty);
 
         // Pass to matching engine
-        const auto new_trades = book.ProcessOrder(order);
-        trades.insert(trades.end(), new_trades.begin(), new_trades.end());
+        const auto new_trade_vector = book.ProcessOrder(order);
+        trade_vector.insert(trade_vector.end(), new_trade_vector.begin(), new_trade_vector.end());
 
         // Testing the CancelOrder
         if (next_order_id == 10) {
@@ -101,6 +101,6 @@ int main() {
         }
     }
 
-    // Either output trades and book here or set breakpoints to inspect
+    // Either output trade_vector and book here or set breakpoints to inspect
     return 0;
 }
