@@ -14,7 +14,7 @@ This project implements a standard price-time priority matching engine. It suppo
 * **Data Structures**: Efficient use of maps and pointers for O(1) lookups and fast level updates.
 * **Architecture**: Separation of concerns between the API (`OrderBook`), Data (`Order`, `Trade`), and Execution (`MatchResult`).
 
-## 🛠️ Project Structure
+## Project Structure
 
 The codebase follows a clean separation of interface and implementation:
 
