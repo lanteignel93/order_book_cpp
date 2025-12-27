@@ -142,6 +142,7 @@ int main() {
     test_cancel_prevents_match();
     test_fifo_same_price_sell_side();
     test_price_priority();
+
     if (failures == 0) {
         std::cout << "\nALL TESTS PASSED\n";
         return 0;
