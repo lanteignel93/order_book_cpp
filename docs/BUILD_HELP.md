@@ -5,7 +5,7 @@
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 ```
-What this does
+**What this does**
 
 * `-S .` → source directory (your repo root)
 * `-B` build → build directory
@@ -24,7 +24,7 @@ You only need to re-run this if:
 cmake --build build -j
 ```
 
-**What this does
+**What this does**
 * Invokes the underlying build tool (Make or Ninja) 
 * Compiles only files that changed 
 * Produces 
@@ -41,4 +41,14 @@ cmake --build build -j
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
+```
+
+# Build with VCPKG 
+
+```bash
+rm -rf build
+cmake -S . -B build \
+  -DCMAKE_TOOLCHAIN_FILE=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
 ```

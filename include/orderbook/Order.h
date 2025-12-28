@@ -5,6 +5,7 @@
 #include <utility>
 
 enum class SIDE { BUY, SELL };
+enum class TYPE { LIMIT_ORDER };
 
 class Order {
   public:

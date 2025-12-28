@@ -1,106 +1,217 @@
+#include <chrono>
 #include <cstdint>
-#include <fstream>
 #include <iostream>
-#include <sstream>
+#include <memory>
 #include <string>
 
 #include "orderbook/Order.h"
 #include "orderbook/OrderBook.h"
 
-SIDE ParseSide(char c) {
-    if (c == 'B')
+#include <arrow/api.h>
+#include <arrow/io/api.h>
+#include <parquet/arrow/reader.h>
+
+static SIDE ParseSideString(const std::string &s) {
+    if (s == "B" || s == "BUY")
         return SIDE::BUY;
-    if (c == 'S')
+    if (s == "S" || s == "SELL")
         return SIDE::SELL;
-    throw std::runtime_error("Invalid side character");
+    throw std::runtime_error("Invalid side value: " + s);
+}
+
+static TYPE ParseTypeString(const std::string &s) {
+    if (s == "LO" || s == "LIMIT_ORDER")
+        return TYPE::LIMIT_ORDER;
+    throw std::runtime_error("Invalid type value: " + s);
+}
+
+static int GetColumnIndex(const std::shared_ptr<arrow::Schema> &schema,
+                          const std::string &name) {
+    const int idx = schema->GetFieldIndex(name);
+    if (idx == -1) {
+        throw std::runtime_error("Missing required column: " + name);
+    }
+    return idx;
+}
+
+static std::string GetStringValue(const std::shared_ptr<arrow::Array> &arr,
+                                  int64_t i) {
+    if (!arr || arr->IsNull(i))
+        return {};
+
+    switch (arr->type_id()) {
+    case arrow::Type::STRING: {
+        auto a = std::static_pointer_cast<arrow::StringArray>(arr);
+        return a->GetString(i);
+    }
+    case arrow::Type::LARGE_STRING: {
+        auto a = std::static_pointer_cast<arrow::LargeStringArray>(arr);
+        return a->GetString(i);
+    }
+    case arrow::Type::DICTIONARY: {
+        auto dict = std::static_pointer_cast<arrow::DictionaryArray>(arr);
+        const auto &dict_values = dict->dictionary();
+
+        // dictionary values should be strings
+        if (dict_values->type_id() == arrow::Type::STRING) {
+            auto dv = std::static_pointer_cast<arrow::StringArray>(dict_values);
+
+            // indices can be int8/int16/int32/int64 depending on encoding
+            const auto &idx = dict->indices();
+            switch (idx->type_id()) {
+            case arrow::Type::INT8: {
+                auto ia = std::static_pointer_cast<arrow::Int8Array>(idx);
+                return dv->GetString(ia->Value(i));
+            }
+            case arrow::Type::INT16: {
+                auto ia = std::static_pointer_cast<arrow::Int16Array>(idx);
+                return dv->GetString(ia->Value(i));
+            }
+            case arrow::Type::INT32: {
+                auto ia = std::static_pointer_cast<arrow::Int32Array>(idx);
+                return dv->GetString(ia->Value(i));
+            }
+            case arrow::Type::INT64: {
+                auto ia = std::static_pointer_cast<arrow::Int64Array>(idx);
+                return dv->GetString(ia->Value(i));
+            }
+            default:
+                throw std::runtime_error("Unsupported dictionary index type: " +
+                                         idx->type()->ToString());
+            }
+        }
+
+        // Some writers can produce large_string dictionaries
+        if (dict_values->type_id() == arrow::Type::LARGE_STRING) {
+            auto dv =
+                std::static_pointer_cast<arrow::LargeStringArray>(dict_values);
+            const auto &idx = dict->indices();
+            if (idx->type_id() == arrow::Type::INT32) {
+                auto ia = std::static_pointer_cast<arrow::Int32Array>(idx);
+                return dv->GetString(ia->Value(i));
+            }
+            throw std::runtime_error(
+                "Unsupported large_string dictionary index type: " +
+                idx->type()->ToString());
+        }
+
+        throw std::runtime_error("Dictionary values are not string type: " +
+                                 dict_values->type()->ToString());
+    }
+    default:
+        throw std::runtime_error("Column is not a string-like type: " +
+                                 arr->type()->ToString());
+    }
 }
 
 int main() {
-    const std::string filename = "data/order_data.csv";
-    std::ifstream file(filename);
+    auto start = std::chrono::system_clock::now();
+    const std::string filename = "data/order_data.parquet";
 
-    if (!file.is_open()) {
-        std::cerr << "Could not open file: " << filename << "\n";
+    auto infile_result = arrow::io::ReadableFile::Open(filename);
+    if (!infile_result.ok()) {
+        std::cerr << "Failed to open parquet file: " << filename
+                  << " error=" << infile_result.status().ToString() << "\n";
         return 1;
     }
+    std::shared_ptr<arrow::io::ReadableFile> infile = *infile_result;
 
-    std::string line;
-    bool is_header = true;
+    auto reader_result =
+        parquet::arrow::OpenFile(infile, arrow::default_memory_pool());
+    if (!reader_result.ok()) {
+        std::cerr << "Failed to create parquet reader: "
+                  << reader_result.status().ToString() << "\n";
+        return 1;
+    }
+    std::unique_ptr<parquet::arrow::FileReader> reader =
+        std::move(reader_result).ValueUnsafe();
+
+    auto rb_reader_result = reader->GetRecordBatchReader();
+    if (!rb_reader_result.ok()) {
+        std::cerr << "Failed to get RecordBatchReader: "
+                  << rb_reader_result.status().ToString() << "\n";
+        return 1;
+    }
+    std::unique_ptr<arrow::RecordBatchReader> rb_reader =
+        std::move(rb_reader_result).ValueUnsafe();
 
     OrderBook book;
     TradeVector trade_vector;
+    trade_vector.reserve(1024);
 
-    uint64_t next_order_id = 1;
-    while (std::getline(file, line)) {
-        if (line.empty())
-            continue;
-
-        if (is_header) {
-            is_header = false; // skip header row
-            continue;
+    uint64_t order_id = 1;
+    while (true) {
+        auto rb_result = rb_reader->Next();
+        if (!rb_result.ok()) {
+            std::cerr << "Error reading RecordBatch: "
+                      << rb_result.status().ToString() << "\n";
+            return 1;
         }
+        std::shared_ptr<arrow::RecordBatch> batch = *rb_result;
+        if (!batch)
+            break; // EOF
 
-        std::stringstream ss(line);
-        std::string field;
+        auto schema = batch->schema();
 
-        int64_t timestamp{};
-        std::string trader;
-        char side_char{};
-        double price{};
-        uint32_t qty{};
+        auto now = std::chrono::system_clock::now();
+        auto duration_since_start = now - start;
+        const int64_t timestamp =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                duration_since_start)
+                .count();
+        const int col_trader = GetColumnIndex(schema, "trader");
+        const int col_side = GetColumnIndex(schema, "side");
+        const int col_price = GetColumnIndex(schema, "price");
+        const int col_qty = GetColumnIndex(schema, "size");
+        const int col_type = GetColumnIndex(schema, "type");
 
-        // timestamp
-        if (!std::getline(ss, field, ','))
-            continue;
-        timestamp = std::stoll(field);
-
-        // trader
-        if (!std::getline(ss, field, ','))
-            continue;
-        trader = field;
-
-        // side
-        if (!std::getline(ss, field, ','))
-            continue;
-        if (field.size() != 1) {
-            std::cerr << "Invalid side value on row: " << line << "\n";
-            continue;
+        // Cast columns to expected Arrow array types
+        auto trader_arr = std::static_pointer_cast<arrow::StringArray>(
+            batch->column(col_trader));
+        auto side_arr = std::static_pointer_cast<arrow::StringArray>(
+            batch->column(col_side));
+        auto price_arr = std::static_pointer_cast<arrow::DoubleArray>(
+            batch->column(col_price));
+        auto qty_col = batch->column(col_qty);
+        if (qty_col->type_id() != arrow::Type::INT64) {
+            throw std::runtime_error("Expected 'size' to be int64, got: " +
+                                     qty_col->type()->ToString());
         }
-        side_char = field[0];
+        auto qty_arr = std::static_pointer_cast<arrow::Int64Array>(qty_col);
+        auto type_arr = std::static_pointer_cast<arrow::StringArray>(
+            batch->column(col_type));
 
-        // price
-        if (!std::getline(ss, field, ','))
-            continue;
-        price = std::stod(field);
+        const int64_t n = batch->num_rows();
+        for (int64_t i = 0; i < n; ++i) {
+            if (trader_arr->IsNull(i) || side_arr->IsNull(i) ||
+                price_arr->IsNull(i) || qty_arr->IsNull(i) ||
+                type_arr->IsNull(i)) {
+                continue;
+            }
 
-        // qty
-        if (!std::getline(ss, field, ','))
-            continue;
-        qty = static_cast<uint32_t>(std::stoul(field));
+            const std::string trader = GetStringValue(trader_arr, i);
+            const std::string side_s = GetStringValue(side_arr, i);
+            const SIDE side = ParseSideString(side_s);
+            const double price = price_arr->Value(i);
+            const int64_t qty64 = qty_arr->Value(i);
+            if (qty64 < 0 || qty64 > std::numeric_limits<uint32_t>::max()) {
+                throw std::runtime_error("Invalid qty out of range: " +
+                                         std::to_string(qty64));
+            }
+            const uint32_t qty = static_cast<uint32_t>(qty64);
+            const std::string type_s = GetStringValue(type_arr, i);
+            const TYPE type = ParseTypeString(type_s);
 
-        // Convert to enum SIDE
-        SIDE side;
-        try {
-            side = ParseSide(side_char);
-        } catch (const std::exception &e) {
-            std::cerr << "Error parsing side at timestamp " << timestamp << ": "
-                      << e.what() << "\n";
-            continue;
-        }
+            Order o(order_id, timestamp, trader, side, price, qty);
 
-        // Create Order instance
-        Order order(next_order_id++, timestamp, trader, side, price, qty);
-
-        // Pass to matching engine
-        const auto new_trade_vector = book.ProcessOrder(order);
-        trade_vector.insert(trade_vector.end(), new_trade_vector.begin(), new_trade_vector.end());
-
-        // Testing the CancelOrder
-        if (next_order_id == 10) {
-            book.CancelOrder(3);
+            auto trades = book.ProcessOrder(o);
+            trade_vector.insert(trade_vector.end(), trades.begin(),
+                                trades.end());
+            order_id++;
         }
     }
 
-    // Either output trade_vector and book here or set breakpoints to inspect
+    std::cout << "Processed parquet file: " << filename << "\n";
+    std::cout << "Total trades: " << trade_vector.size() << "\n";
     return 0;
 }
